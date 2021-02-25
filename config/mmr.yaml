@@ -1,6 +1,6 @@
 common:
   frame_id: "lili_om_rot"
-  data_set: "utbm"
+  data_set: "mmr"
   
 IMU:
   acc_n: 2000 # 18
