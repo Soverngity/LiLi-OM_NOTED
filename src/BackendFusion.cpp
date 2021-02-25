@@ -83,7 +83,7 @@ private:
     pcl::PointCloud<PointType>::Ptr his_key_frames;
     pcl::PointCloud<PointType>::Ptr his_key_frames_ds;
 
-    pcl::PointCloud<PointXYZI>::Ptr pose_cloud_frame; //position of keyframe
+    pcl::PointCloud<PointXYZI>::Ptr pose_cloud_frame; //position of keyframe, 存储的是imu在map下的位置，下同
     // Usage for PointPoseInfo
     // position: x, y, z
     // orientation: qw - w, qx - x, qy - y, qz - z
@@ -598,6 +598,7 @@ public:
             if(data_set == "utbm")
                 g = Eigen::Vector3d(ImuIn->linear_acceleration.x, ImuIn->linear_acceleration.y, ImuIn->linear_acceleration.z);
             else {
+                g = Eigen::Vector3d(ImuIn->linear_acceleration.x, ImuIn->linear_acceleration.y, ImuIn->linear_acceleration.z);
                 // 取9轴姿态
                 Eigen::Quaterniond quat(ImuIn->orientation.w,
                                         ImuIn->orientation.x,
@@ -882,10 +883,20 @@ public:
                         tmpTrans[idx-keyframe_idx[keyframe_idx.size()-slide_window_width]][1],
                         tmpTrans[idx-keyframe_idx[keyframe_idx.size()-slide_window_width]][2]);
                 // Lidar在map全局下的位姿，因为使用q_lb.inverse()且减去Q2 * t_lb
+
+                // Eigen::Quaterniond Q2_ = Q2;
+                // Eigen::Vector3d T2_ = T2;
+                // cout << "befor_:" << T2_.x() << " " << T2_.y() << " " << T2_.z() << endl;
+                // T2 = T2_ + Q2_ * t_bl;
+                // cout << "after_:" << T2.x() << " " << T2.y() << " " << T2.z() << endl;
+
                 // cout << "befor:" << T2.x() << " " << T2.y() << " " << T2.z() << endl;
-                Q2 = Q2 * q_lb.inverse();
-                T2 = T2 - Q2 * t_lb;
+                Q2 = Q2 * q_lb.inverse();   // Q2 = Q2 * q_bl;
+                T2 = T2 - Q2 * t_lb;        // T2 = T2 + Q2_ * t_bl;  打印出来的结果相同，因此还是先转imu坐标系再转map坐标系
+                // 与后边进行坐标系转换的区别在于在Q2上进行更新操作，后边的赋值都是新建一个变量而不是操作Q2在此基础上进行T2的转换
                 // cout << "after:" << T2.x() << " " << T2.y() << " " << T2.z() << endl;
+
+
                 // idVec: 0,1,2
                 int idVec = idx - keyframe_idx[keyframe_idx.size()-slide_window_width];
                 // 如果局部地图点数足够
@@ -2712,8 +2723,10 @@ public:
                                      pose_info_cloud_frame->points[i].y,
                                      pose_info_cloud_frame->points[i].z);
                 // 关键帧位姿由Lidar坐标系变换到imu坐标系(q_bl)再转换到imu全局map坐标系(q_po)
+                // cout << "publishCompleteMap_befor:" << t_po.x() << " " << t_po.y() << " " << t_po.z() << endl;
                 Eigen::Quaterniond q_tmp = q_po * q_bl;
                 Eigen::Vector3d t_tmp = q_po * t_bl + t_po;
+                // cout << "publishCompleteMap_after:" << t_tmp.x() << " " << t_tmp.y() << " " << t_tmp.z() << endl;
 
                 PointPoseInfo Ttmp;
                 Ttmp.qw = q_tmp.w();
@@ -2749,10 +2762,10 @@ public:
         }
         // path保存到txt
         for (int i = 0; i < pose_info_cloud_frame->points.size(); i = i + mapping_interval) {
-            out_txt_global_file << setprecision(6)
+            out_txt_global_file << std::fixed
                                 << pose_info_cloud_frame->points[i].time << " "
+                                << pose_info_cloud_frame->points[i].x << " "
                                 << pose_info_cloud_frame->points[i].y << " "
-                                << pose_info_cloud_frame->points[i].x*-1.0 << " "
                                 << pose_info_cloud_frame->points[i].z << " "
                                 << pose_info_cloud_frame->points[i].qx << " "
                                 << pose_info_cloud_frame->points[i].qy << " "
